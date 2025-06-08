@@ -2,8 +2,16 @@ services:
   - type: web
     name: api-emociones
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    region: oregon # o la región más cercana a ti
+    plan: starter # o el plan que prefieras
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --timeout 300 --workers 1 --max-requests 100 --preload
     envVars:
       - key: PYTHONUNBUFFERED
         value: 'true'
+      - key: PYTHONDONTWRITEBYTECODE
+        value: 'true'
+    # Configuración de recursos
+    autoDeploy: true
+    # Aumentar timeout para la descarga del modelo
+    buildTimeout: 20 # minutos
