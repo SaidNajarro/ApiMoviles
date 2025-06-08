@@ -1,7 +1,7 @@
-Flask
-opencv-python-headless
+flask
 numpy
-tensorflow
+opencv-python-headless
 keras
-gunicorn
+tensorflow
 requests
+gunicorn
