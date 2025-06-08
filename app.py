@@ -10,76 +10,63 @@ import requests
 # === Configuración del log ===
 logging.basicConfig(level=logging.DEBUG)
 
-# === Descargar modelo si no existe ===
-MODELO_ID = "1quWZTBuNOpoYi_YF0y3xVIuTI0MHqcu5"
-MODELO_PATH = "modelo_emociones_25.keras"
+# === Descargar modelo desde GitHub Release ===
+# REEMPLAZA ESTOS VALORES CON LOS TUYOS:
+GITHUB_USER = "SaidNajarro"  # Reemplaza con tu usuario
+REPO_NAME = "ApiMoviles"          # Reemplaza con el nombre de tu repo
+TAG_NAME = "Kerasss"                   # Reemplaza con tu tag (ej: v1.0.0)
+FILE_NAME = "modelo_emociones_25.keras"
 
-def descargar_modelo_desde_gdrive(file_id, destination):
-    """Descarga archivo de Google Drive manejando archivos grandes"""
+MODELO_PATH = FILE_NAME
+
+def descargar_modelo_desde_github():
+    """Descarga el modelo desde GitHub Releases"""
+    if os.path.exists(MODELO_PATH):
+        print(f"Modelo ya existe. Tamaño: {os.path.getsize(MODELO_PATH)} bytes")
+        return True
+        
+    url = f"https://github.com/{GITHUB_USER}/{REPO_NAME}/releases/download/{TAG_NAME}/{FILE_NAME}"
     
-    def get_confirm_token(response):
-        for key, value in response.cookies.items():
-            if key.startswith('download_warning'):
-                return value
-        return None
-
-    def save_response_content(response, destination):
-        CHUNK_SIZE = 32768
-        with open(destination, "wb") as f:
-            for chunk in response.iter_content(CHUNK_SIZE):
+    print(f"Descargando modelo desde GitHub Release:")
+    print(f"URL: {url}")
+    
+    try:
+        response = requests.get(url, stream=True, timeout=600)
+        response.raise_for_status()
+        
+        # Descargar en chunks
+        with open(MODELO_PATH, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
-
-    URL = "https://docs.google.com/uc?export=download"
-    
-    session = requests.Session()
-    response = session.get(URL, params={'id': file_id}, stream=True)
-    token = get_confirm_token(response)
-
-    if token:
-        params = {'id': file_id, 'confirm': token}
-        response = session.get(URL, params=params, stream=True)
-
-    save_response_content(response, destination)
-
-def descargar_modelo():
-    if not os.path.exists(MODELO_PATH):
-        print("Descargando el modelo desde Google Drive...")
-        try:
-            descargar_modelo_desde_gdrive(MODELO_ID, MODELO_PATH)
-            
-            tamaño = os.path.getsize(MODELO_PATH)
-            print(f"Modelo descargado. Tamaño: {tamaño} bytes")
-            
-            # Verificar que el archivo es válido (debe ser mayor a 100KB para un modelo)
-            if tamaño < 100000:  # 100KB
-                print(f"ADVERTENCIA: El archivo descargado es muy pequeño ({tamaño} bytes)")
-                print("Esto podría indicar que se descargó una página HTML en lugar del modelo")
-                
-                # Leer las primeras líneas para verificar
-                with open(MODELO_PATH, 'r', encoding='utf-8', errors='ignore') as f:
-                    primeras_lineas = f.read(500)
-                    if 'html' in primeras_lineas.lower() or 'DOCTYPE' in primeras_lineas:
-                        print("ERROR: Se descargó HTML en lugar del modelo")
-                        os.remove(MODELO_PATH)
-                        return False
-            
-            return True
-            
-        except Exception as e:
-            print(f"Error descargando el modelo: {e}")
-            if os.path.exists(MODELO_PATH):
-                os.remove(MODELO_PATH)
+        
+        tamaño = os.path.getsize(MODELO_PATH)
+        print(f"✅ Modelo descargado exitosamente. Tamaño: {tamaño} bytes")
+        
+        # Verificar que es un archivo válido
+        if tamaño < 100000:  # Menor a 100KB
+            print("⚠️ ADVERTENCIA: El archivo parece muy pequeño para ser un modelo")
             return False
-    else:
-        print(f"Modelo ya existe. Tamaño: {os.path.getsize(MODELO_PATH)} bytes")
-    return True
+            
+        return True
+        
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error descargando desde GitHub: {e}")
+        if os.path.exists(MODELO_PATH):
+            os.remove(MODELO_PATH)
+        return False
+    except Exception as e:
+        print(f"❌ Error inesperado: {e}")
+        if os.path.exists(MODELO_PATH):
+            os.remove(MODELO_PATH)
+        return False
 
 # Intentar descargar el modelo
-if not descargar_modelo():
-    print("ADVERTENCIA: No se pudo descargar el modelo. La aplicación puede fallar.")
+print("Iniciando descarga del modelo...")
+if not descargar_modelo_desde_github():
+    print("❌ ADVERTENCIA: No se pudo descargar el modelo. La aplicación puede fallar.")
 else:
-    print("Modelo disponible para carga.")
+    print("✅ Modelo disponible para carga.")
 
 # === Carga del modelo y clasificador de rostro ===
 def cargar_modelo():
