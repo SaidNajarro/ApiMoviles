@@ -9,7 +9,7 @@ import logging
 #---------
 import requests
 
-MODELO_URL = "https://drive.google.com/file/d/1quWZTBuNOpoYi_YF0y3xVIuTI0MHqcu5/view?usp=drive_link"
+MODELO_URL = "https://drive.google.com/uc?export=download&id=1quWZTBuNOpoYi_YF0y3xVIuTI0MHqcu5"
 
 MODELO_PATH = "modelo_emociones_25.keras"
 
