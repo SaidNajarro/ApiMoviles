@@ -5,28 +5,35 @@ import tempfile
 from keras.models import load_model
 import os
 import logging
-
-#---------
 import requests
-
-MODELO_URL = "https://drive.google.com/uc?export=download&id=1quWZTBuNOpoYi_YF0y3xVIuTI0MHqcu5"
-
-MODELO_PATH = "modelo_emociones_25.keras"
-
-if not os.path.exists(MODELO_PATH):
-    print("Descargando el modelo...")
-    r = requests.get(MODELO_URL)
-    with open(MODELO_PATH, "wb") as f:
-        f.write(r.content)
-
-#---------
 
 # === Configuración del log ===
 logging.basicConfig(level=logging.DEBUG)
 
+# === Descargar modelo si no existe ===
+MODELO_URL = "https://drive.google.com/uc?export=download&id=1quWZTBuNOpoYi_YF0y3xVIuTI0MHqcu5"
+MODELO_PATH = "modelo_emociones_25.keras"
+
+if not os.path.exists(MODELO_PATH):
+    print("Descargando el modelo...")
+    try:
+        r = requests.get(MODELO_URL, timeout=300)  # 5 minutos de timeout
+        r.raise_for_status()  # Lanza excepción si hay error HTTP
+        with open(MODELO_PATH, "wb") as f:
+            f.write(r.content)
+        print("Modelo descargado exitosamente")
+    except Exception as e:
+        print(f"Error descargando el modelo: {e}")
+        raise
+
 # === Carga del modelo y clasificador de rostro ===
-model = load_model('modelo_emociones_25.keras')
+print("Cargando modelo de emociones...")
+model = load_model(MODELO_PATH)
+print("Modelo cargado exitosamente")
+
+print("Cargando clasificador de rostros...")
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+print("Clasificador de rostros cargado exitosamente")
 
 emotion_dict = {
     0: "Anger",
@@ -135,6 +142,11 @@ def analizar_frame(frame):
 
     return resultados
 
-# === Iniciar el servidor local ===
+# === Health check endpoint ===
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({"status": "healthy", "modelo_cargado": True})
+
+# === Iniciar el servidor ===
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
