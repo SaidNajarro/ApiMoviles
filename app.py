@@ -11,33 +11,68 @@ import requests
 logging.basicConfig(level=logging.DEBUG)
 
 # === Descargar modelo si no existe ===
-MODELO_URL = "https://drive.google.com/uc?export=download&id=1quWZTBuNOpoYi_YF0y3xVIuTI0MHqcu5"
+MODELO_ID = "1quWZTBuNOpoYi_YF0y3xVIuTI0MHqcu5"
 MODELO_PATH = "modelo_emociones_25.keras"
+
+def descargar_modelo_desde_gdrive(file_id, destination):
+    """Descarga archivo de Google Drive manejando archivos grandes"""
+    
+    def get_confirm_token(response):
+        for key, value in response.cookies.items():
+            if key.startswith('download_warning'):
+                return value
+        return None
+
+    def save_response_content(response, destination):
+        CHUNK_SIZE = 32768
+        with open(destination, "wb") as f:
+            for chunk in response.iter_content(CHUNK_SIZE):
+                if chunk:
+                    f.write(chunk)
+
+    URL = "https://docs.google.com/uc?export=download"
+    
+    session = requests.Session()
+    response = session.get(URL, params={'id': file_id}, stream=True)
+    token = get_confirm_token(response)
+
+    if token:
+        params = {'id': file_id, 'confirm': token}
+        response = session.get(URL, params=params, stream=True)
+
+    save_response_content(response, destination)
 
 def descargar_modelo():
     if not os.path.exists(MODELO_PATH):
-        print("Descargando el modelo...")
+        print("Descargando el modelo desde Google Drive...")
         try:
-            # Headers para simular un navegador
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-            r = requests.get(MODELO_URL, timeout=600, headers=headers, stream=True)
-            r.raise_for_status()
+            descargar_modelo_desde_gdrive(MODELO_ID, MODELO_PATH)
             
-            # Descargar en chunks para archivos grandes
-            with open(MODELO_PATH, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
+            tamaño = os.path.getsize(MODELO_PATH)
+            print(f"Modelo descargado. Tamaño: {tamaño} bytes")
             
-            print(f"Modelo descargado exitosamente. Tamaño: {os.path.getsize(MODELO_PATH)} bytes")
+            # Verificar que el archivo es válido (debe ser mayor a 100KB para un modelo)
+            if tamaño < 100000:  # 100KB
+                print(f"ADVERTENCIA: El archivo descargado es muy pequeño ({tamaño} bytes)")
+                print("Esto podría indicar que se descargó una página HTML en lugar del modelo")
+                
+                # Leer las primeras líneas para verificar
+                with open(MODELO_PATH, 'r', encoding='utf-8', errors='ignore') as f:
+                    primeras_lineas = f.read(500)
+                    if 'html' in primeras_lineas.lower() or 'DOCTYPE' in primeras_lineas:
+                        print("ERROR: Se descargó HTML en lugar del modelo")
+                        os.remove(MODELO_PATH)
+                        return False
+            
             return True
+            
         except Exception as e:
             print(f"Error descargando el modelo: {e}")
             if os.path.exists(MODELO_PATH):
                 os.remove(MODELO_PATH)
             return False
+    else:
+        print(f"Modelo ya existe. Tamaño: {os.path.getsize(MODELO_PATH)} bytes")
     return True
 
 # Intentar descargar el modelo
