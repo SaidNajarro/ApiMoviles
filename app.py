@@ -14,26 +14,68 @@ logging.basicConfig(level=logging.DEBUG)
 MODELO_URL = "https://drive.google.com/uc?export=download&id=1quWZTBuNOpoYi_YF0y3xVIuTI0MHqcu5"
 MODELO_PATH = "modelo_emociones_25.keras"
 
-if not os.path.exists(MODELO_PATH):
-    print("Descargando el modelo...")
-    try:
-        r = requests.get(MODELO_URL, timeout=300)  # 5 minutos de timeout
-        r.raise_for_status()  # Lanza excepción si hay error HTTP
-        with open(MODELO_PATH, "wb") as f:
-            f.write(r.content)
-        print("Modelo descargado exitosamente")
-    except Exception as e:
-        print(f"Error descargando el modelo: {e}")
-        raise
+def descargar_modelo():
+    if not os.path.exists(MODELO_PATH):
+        print("Descargando el modelo...")
+        try:
+            # Headers para simular un navegador
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            r = requests.get(MODELO_URL, timeout=600, headers=headers, stream=True)
+            r.raise_for_status()
+            
+            # Descargar en chunks para archivos grandes
+            with open(MODELO_PATH, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            
+            print(f"Modelo descargado exitosamente. Tamaño: {os.path.getsize(MODELO_PATH)} bytes")
+            return True
+        except Exception as e:
+            print(f"Error descargando el modelo: {e}")
+            if os.path.exists(MODELO_PATH):
+                os.remove(MODELO_PATH)
+            return False
+    return True
+
+# Intentar descargar el modelo
+if not descargar_modelo():
+    print("ADVERTENCIA: No se pudo descargar el modelo. La aplicación puede fallar.")
+else:
+    print("Modelo disponible para carga.")
 
 # === Carga del modelo y clasificador de rostro ===
-print("Cargando modelo de emociones...")
-model = load_model(MODELO_PATH)
-print("Modelo cargado exitosamente")
+def cargar_modelo():
+    try:
+        print("Cargando modelo de emociones...")
+        model = load_model(MODELO_PATH)
+        print("Modelo cargado exitosamente")
+        return model
+    except Exception as e:
+        print(f"Error cargando el modelo: {e}")
+        return None
 
-print("Cargando clasificador de rostros...")
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-print("Clasificador de rostros cargado exitosamente")
+def cargar_clasificador():
+    try:
+        print("Cargando clasificador de rostros...")
+        cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        face_cascade = cv2.CascadeClassifier(cascade_path)
+        if face_cascade.empty():
+            raise Exception("No se pudo cargar el clasificador de rostros")
+        print("Clasificador de rostros cargado exitosamente")
+        return face_cascade
+    except Exception as e:
+        print(f"Error cargando clasificador: {e}")
+        return None
+
+# Cargar modelo y clasificador
+model = cargar_modelo()
+face_cascade = cargar_clasificador()
+
+if model is None or face_cascade is None:
+    print("ADVERTENCIA: No se pudieron cargar todos los componentes necesarios")
 
 emotion_dict = {
     0: "Anger",
@@ -50,10 +92,19 @@ app = Flask(__name__)
 
 @app.route('/', methods=['POST'])
 def detectar_emociones():
+    # Verificar que los componentes estén cargados
+    if model is None:
+        return jsonify({"error": "Modelo no disponible"}), 503
+    if face_cascade is None:
+        return jsonify({"error": "Clasificador de rostros no disponible"}), 503
+        
     if 'file' not in request.files:
         return jsonify({"error": "No se encontró archivo con clave 'file'"}), 400
 
     file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No se seleccionó archivo"}), 400
+        
     filename = file.filename.lower()
 
     with tempfile.NamedTemporaryFile(delete=False) as temp:
@@ -145,7 +196,22 @@ def analizar_frame(frame):
 # === Health check endpoint ===
 @app.route('/health', methods=['GET'])
 def health_check():
-    return jsonify({"status": "healthy", "modelo_cargado": True})
+    return jsonify({
+        "status": "healthy", 
+        "modelo_cargado": model is not None,
+        "clasificador_cargado": face_cascade is not None,
+        "modelo_existe": os.path.exists(MODELO_PATH)
+    })
+
+@app.route('/', methods=['GET'])
+def home():
+    return jsonify({
+        "mensaje": "API de Detección de Emociones",
+        "endpoints": {
+            "/": "POST - Enviar archivo de imagen o video",
+            "/health": "GET - Estado de la API"
+        }
+    })
 
 # === Iniciar el servidor ===
 if __name__ == '__main__':
